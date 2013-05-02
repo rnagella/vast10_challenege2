@@ -1,0 +1,99 @@
+<style>
+
+@import url(http://fonts.googleapis.com/css?family=PT+Serif|PT+Serif:b|PT+Serif:i|PT+Sans|PT+Sans:b);
+
+body {
+	text-align: center;
+	font-size: 12px;
+	margin: 0 0 2em;
+}
+
+h1 {
+  color: #000;
+  font-family: "PT Sans", sans-serif;
+  font-size: 64px;
+  font-weight: 300;
+  letter-spacing: -2px;
+  margin: .3em 0 .1em 0;
+}
+
+#chart {
+	margin-left: -40px;
+	height: 506px;
+}
+
+text {
+	font: 10px sans-serif;
+}
+
+.bar {
+	display: inline-block;
+	background-color: teal;
+	width: 20px;
+	height: 20px;
+}
+
+.dot {
+	stroke: #000;
+}
+
+div.bar {
+	display: inline-block;
+	width: 20px;
+	height: 15px;
+	background-color: teal;
+}
+
+.change {
+	stroke: #444;
+}
+
+.axis path, .axis line {
+	fill: none;
+	stroke: #000;
+	shape-rendering: crispEdges;
+}
+
+.label {
+	fill: #777;
+}
+
+.year.label {
+	font: 500 196px "Helvetica Neue";
+	fill: #ddd;
+}
+
+.year.label.active {
+	fill: #aaa;
+}
+
+.overlay {
+	fill: none;
+	pointer-events: all;
+	cursor: ew-resize;
+}
+
+.calTab {
+	border-collapse:collapse;
+}
+
+.calTab tr {
+	vertical-align: top;
+}
+
+.calTab td {
+	width: 79px;
+	height: 79px;
+	border: 1px solid #000;
+}
+
+.cCell {
+	background: #4f81bd;
+	color: #fff;
+}
+
+.cCell2 {
+	background: url('calbg1.jpg') repeat-y;
+	color: #fff;
+}
+</style>

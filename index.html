@@ -1,0 +1,1441 @@
+
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>CS 795 Project 1</title>
+<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.2/themes/smoothness/jquery-ui.css" />
+<script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+<script src="http://code.jquery.com/ui/1.10.2/jquery-ui.js"></script>
+<style>
+
+@import url(http://fonts.googleapis.com/css?family=PT+Serif|PT+Serif:b|PT+Serif:i|PT+Sans|PT+Sans:b);
+
+body {
+	text-align: center;
+	font-size: 12px;
+	margin: 0 0 2em;
+}
+
+h1 {
+  color: #000;
+  font-family: "PT Sans", sans-serif;
+  font-size: 64px;
+  font-weight: 300;
+  letter-spacing: -2px;
+  margin: .3em 0 .1em 0;
+}
+
+#chart {
+	margin-left: -40px;
+	height: 506px;
+}
+
+text {
+	font: 10px sans-serif;
+}
+
+.bar {
+	display: inline-block;
+	background-color: teal;
+	width: 20px;
+	height: 20px;
+}
+
+.dot {
+	stroke: #000;
+}
+
+div.bar {
+	display: inline-block;
+	width: 20px;
+	height: 15px;
+	background-color: teal;
+}
+
+.change {
+	stroke: #444;
+}
+
+.axis path, .axis line {
+	fill: none;
+	stroke: #000;
+	shape-rendering: crispEdges;
+}
+
+.label {
+	fill: #777;
+}
+
+.year.label {
+	font: 500 196px "Helvetica Neue";
+	fill: #ddd;
+}
+
+.year.label.active {
+	fill: #aaa;
+}
+
+.overlay {
+	fill: none;
+	pointer-events: all;
+	cursor: ew-resize;
+}
+
+.calTab {
+	border-collapse:collapse;
+}
+
+.calTab tr {
+	vertical-align: top;
+}
+
+.calTab td {
+	width: 79px;
+	height: 79px;
+	border: 1px solid #000;
+}
+
+.cCell {
+	background: #4f81bd;
+	color: #fff;
+}
+
+.cCell2 {
+	background: url('images/calbg1.jpg') repeat-y;
+	color: #fff;
+}
+</style>
+<script>
+	var dateList = new Array("2009-04-16","2009-04-17","2009-04-18","2009-04-19","2009-04-20","2009-04-21","2009-04-22","2009-04-23","2009-04-24","2009-04-25","2009-04-26","2009-04-27","2009-04-28","2009-04-29","2009-04-30","2009-05-01","2009-05-02","2009-05-03","2009-05-04","2009-05-05","2009-05-06","2009-05-07","2009-05-08","2009-05-09","2009-05-10","2009-05-11","2009-05-12","2009-05-13","2009-05-14","2009-05-15","2009-05-16","2009-05-17","2009-05-18","2009-05-19","2009-05-20","2009-05-21","2009-05-22","2009-05-23","2009-05-24","2009-05-25","2009-05-26","2009-05-27","2009-05-28","2009-05-29","2009-05-30","2009-05-31","2009-06-01","2009-06-02","2009-06-03","2009-06-04","2009-06-05","2009-06-06","2009-06-07","2009-06-08","2009-06-09","2009-06-10","2009-06-11","2009-06-12","2009-06-13","2009-06-14","2009-06-15","2009-06-16","2009-06-17","2009-06-18","2009-06-19","2009-06-20","2009-06-21","2009-06-22","2009-06-23","2009-06-24","2009-06-25","2009-06-26","2009-06-27","2009-06-28","2009-06-29","2009-06-30");
+
+	var currentIndex = 0;
+	var timerVar;
+	
+	$(function() {
+		timerVar=setInterval(function(){loadDaysData()},500);
+		
+		$( "#tabs" ).tabs();
+		
+		$("input[type=button]").button();
+		
+		$( "#slider" ).slider({
+			value: 0,
+			min: 0,
+			max: dateList.length,
+			step: 1,
+			slide: function( event, ui ) {
+				$("#pButton").val("Play");
+				clearInterval(timerVar);
+				$( "#theDate" ).html( dateList[ui.value] );
+			},
+			change: function( event, ui ) {
+				currentIndex = ui.value;
+				//$("#theDate").html(dateList[currentIndex]);
+				var file = "data_files/"+dateList[currentIndex]+".json";
+				d3.json(file, function (jsondata) { plotData(jsondata); });
+			}
+		});
+	});
+</script>
+</head>
+<body>
+<div style="background: #ddd">
+<strong>CS 795 Visual Analytics<br />
+Spring 2013<br />
+Project 1: VAST Challenge 2010 Mini-Challenge 2<br /></strong>
+</div>
+<h1>DISEASE OUTBREAK ACROSS CITIES</h1>
+<div id="theDate" style="font-size: 2em; font-family: sans-serif;">2009-04-16</div>
+<div id="slider" style="width: 50%; margin: 0 auto;"></div>
+<input type="button" value="Pause" onclick="controlAnim()" id="pButton" />
+<div>Bubble radius represents daily fatality rate.<br />A larger bubble means a higher percentage of patients died.</div>
+<p id="chart"></p>
+
+<script src="http://d3js.org/d3.v2.js?2.8.1"></script>
+<script>
+// Chart dimensions.
+var margin = {top: 19.5, right: 19.5, bottom: 19.5, left: 39.5},
+    width = 960 - margin.right,
+    height = 500 - margin.top - margin.bottom;
+	
+// Various scales. These domains make assumptions of data, naturally.
+var xScale = d3.scale.linear().domain([0, 200000]).range([0, width]),
+    yScale = d3.scale.linear().domain([0, 12000]).range([height, 0]),
+    radiusScale = d3.scale.linear().domain([0, 5]).range([0, 20]),
+    colorScale = d3.scale.category20();
+
+// The x & y axes.
+var xAxis = d3.svg.axis().orient("bottom").scale(xScale).ticks(12, d3.format(",d")),
+    yAxis = d3.svg.axis().scale(yScale).orient("left");
+	
+// Create the SVG container and set the origin.
+var svg = d3.select("#chart").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+	
+//SVG for Displaying statistics
+	var svg1=d3.select("body").append("svg1").attr("id","extrasvg").attr("width",400).attr("height",400);
+	
+// Add the x-axis.
+svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(xAxis);
+
+// Add the y-axis.
+svg.append("g")
+    .attr("class", "y axis")
+    .call(yAxis);
+	
+// Add an x-axis label.
+svg.append("text")
+    .attr("class", "x label")
+    .attr("text-anchor", "end")
+    .attr("x", width)
+    .attr("y", height - 6)
+    .text("Number of Infections");
+
+// Add a y-axis label.
+svg.append("text")
+    .attr("class", "y label")
+    .attr("text-anchor", "end")
+    .attr("y", 6)
+    .attr("dy", ".75em")
+    .attr("transform", "rotate(-90)")
+    .text("Number of Deaths");
+	
+//loading data-----------------------------------------------------
+function loadDaysData() {
+	currentIndex++;
+	if (currentIndex == dateList.length)
+		currentIndex = 0;
+	$("#theDate").html(dateList[currentIndex]);
+	$("#slider").slider("option", "value", currentIndex);
+	var file = "data_files/"+dateList[currentIndex]+".json";
+	d3.json(file, function (jsondata) { plotData(jsondata); });
+}
+
+function controlAnim() {
+	var theButton = document.getElementById("pButton");
+	var c = theButton.value;
+	if (c == "Play") {
+		theButton.value = "Pause";
+		timerVar=setInterval(function(){loadDaysData()},500);
+	}
+	else {
+		theButton.value = "Play";
+		clearInterval(timerVar);
+	}
+}
+
+function plotData(jsondata) {
+	var male_infections,female_infections,male_deaths,female_deaths;
+	
+	//Making chart
+	svg.selectAll("circle").remove();
+	dot = svg.append("g").selectAll("dot").data(jsondata).enter().append("circle")
+			 .style("fill", function(d) { return colorScale(d.country); }).call(position);
+
+	//adding mouse listeners
+	dot.on("click", function(d){
+		var cn=d.country;
+		if (cn == "Aleppo")
+			$( "#tabs" ).tabs( "option", "active", 0 );
+		else if (cn == "Colombia")
+			$( "#tabs" ).tabs( "option", "active", 1 );
+		else if (cn == "Iran")
+			$( "#tabs" ).tabs( "option", "active", 2 );
+		else if (cn == "Karachi")
+			$( "#tabs" ).tabs( "option", "active", 3 );
+		else if (cn == "Lebanon")
+			$( "#tabs" ).tabs( "option", "active", 4 );
+		else if (cn == "Nairobi")
+			$( "#tabs" ).tabs( "option", "active", 5 );
+		else if (cn == "SaudiArabia")
+			$( "#tabs" ).tabs( "option", "active", 6 );
+		else if (cn == "Thailand")
+			$( "#tabs" ).tabs( "option", "active", 7 );
+		else if (cn == "Turkey")
+			$( "#tabs" ).tabs( "option", "active", 8 );
+		else if (cn == "Venezuela")
+			$( "#tabs" ).tabs( "option", "active", 9 );
+		else if (cn == "Yemen")
+			$( "#tabs" ).tabs( "option", "active", 10 );
+	});
+	
+	//Appending Title
+	dot.append("title").text(function(d) { return d.country; });
+
+	function position(dot) 
+	{
+		dot .attr("cx", function(d) { return xScale(d.infections); })
+			.attr("cy", function(d) { return yScale(d.deaths); })
+			.attr("r", function(d) { return radiusScale(d.death_rate); });
+	}
+}
+</script>
+
+<div id="tabs" style="margin: 0 auto; width: 1000px;">
+	<ul>
+		<li><a href="#tabs-1">Aleppo</a></li>
+		<li><a href="#tabs-2">Colombia</a></li>
+		<li><a href="#tabs-3">Iran</a></li>
+		<li><a href="#tabs-4">Karachi</a></li>
+		<li><a href="#tabs-5">Lebanon</a></li>
+		<li><a href="#tabs-6">Nairobi</a></li>
+		<li><a href="#tabs-7">Saudi Arabia</a></li>
+		<li><a href="#tabs-8">Thailand</a></li>
+		<li><a href="#tabs-9">Turkey</a></li>
+		<li><a href="#tabs-10">Venezuela</a></li>
+		<li><a href="#tabs-11">Yemen</a></li>
+	</ul>
+	<div id="tabs-1" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Back Pain</li>
+				<li>Fever</li>
+				<li>Nose bleeds</li>
+				<li>Diarrhea</li>
+				<li>Cough</li>
+				<li>Hand Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Leg Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 2,242,648</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.1%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>49.9%</td>
+			</tr>
+		</table>
+		<p><img src="images/Aleppo_I.png" /></p>
+		
+		<strong>Deaths: 78,672</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.3%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>49.7%</td>
+			</tr>
+		</table>
+		<p><img src="images/Aleppo_DC.png" /></p>
+		
+		<strong>Fatality Rate: 3.51%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>3.49%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>3.53%</td>
+			</tr>
+		</table>
+		<p><img src="images/Aleppo_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.94 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-2" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Fever</li>
+				<li>Diarrhea</li>
+				<li>Nose bleeds</li>
+				<li>Back Pain</li>
+				<li>Hand Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Leg Pain</li>
+				<li>Foot Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 705,281</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.9%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.1%</td>
+			</tr>
+		</table>
+		<p><img src="images/Colombia_I.png" /></p>
+		
+		<strong>Deaths: 16,338</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.0%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.0%</td>
+			</tr>
+		</table>
+		<p><img src="images/Colombia_DC.png" /></p>
+		
+		<strong>Fatality Rate: 2.32%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>2.32%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>2.31%</td>
+			</tr>
+		</table>
+		<p><img src="images/Colombia_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.89 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-3" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Diarrhea</li>
+				<li>Fever</li>
+				<li>Leg Pain</li>
+				<li>Back Pain</li>
+				<li>Nose bleeds</li>
+				<li>Cough</li>
+				<li>Visual Difficulty</li>
+				<li>Hand Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 543,248</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.0%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.0%</td>
+			</tr>
+		</table>
+		<p><img src="images/Iran_I.png" /></p>
+		
+		<strong>Deaths: 11,926</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.7%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.3%</td>
+			</tr>
+		</table>
+		<p><img src="images/Iran_DC.png" /></p>
+		
+		<strong>Fatality Rate: 2.20%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>2.21%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>2.18%</td>
+			</tr>
+		</table>
+		<p><img src="images/Iran_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.89 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-4" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Fever</li>
+				<li>Diarrhea</li>
+				<li>Back Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Nose bleeds</li>
+				<li>Cough</li>
+				<li>Hand Pain</li>
+				<li>Leg Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 7,154,924</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.0%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.0%</td>
+			</tr>
+		</table>
+		<p><img src="images/Karachi_I.png" /></p>
+		
+		<strong>Deaths: 165,605</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.8%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.2%</td>
+			</tr>
+		</table>
+		<p><img src="images/Karachi_DC.png" /></p>
+		
+		<strong>Fatality Rate: 2.31%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>2.32%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>2.31%</td>
+			</tr>
+		</table>
+		<p><img src="images/Colombia_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.89 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-5" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Back Pain</li>
+				<li>Fever</li>
+				<li>Nose bleeds</li>
+				<li>Diarrhea</li>
+				<li>Leg Pain</li>
+				<li>Hand Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Cough</li>
+			</ol>
+		</div>
+		<strong>Infections: 441,189</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.8%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.2%</td>
+			</tr>
+		</table>
+		<p><img src="images/Lebanon_I.png" /></p>
+		
+		<strong>Deaths: 7,646</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.7%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.3%</td>
+			</tr>
+		</table>
+		<p><img src="images/Lebanon_DC.png" /></p>
+		
+		<strong>Fatality Rate: 1.73%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>1.74%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>1.73%</td>
+			</tr>
+		</table>
+		<p><img src="images/Lebanon_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.86 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-6" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Back Pain</li>
+				<li>Fever</li>
+				<li>Nose bleeds</li>
+				<li>Diarrhea</li>
+				<li>Cough</li>
+				<li>Hand Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Leg Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 1,291,059</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.0%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.0%</td>
+			</tr>
+		</table>
+		<p><img src="images/Nairobi_I.png" /></p>
+		
+		<strong>Deaths: 43,959</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.3%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>49.7%</td>
+			</tr>
+		</table>
+		<p><img src="images/Nairobi_DC.png" /></p>
+		
+		<strong>Fatality Rate: 3.40%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>3.38%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>3.42%</td>
+			</tr>
+		</table>
+		<p><img src="images/Nairobi_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.94 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-7" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Fever</li>
+				<li>Diarrhea</li>
+				<li>Nose bleeds</li>
+				<li>Back Pain</li>
+				<li>Hand Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Leg Pain</li>
+				<li>Foot Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 1,327,562</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.9%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.1%</td>
+			</tr>
+		</table>
+		<p><img src="images/Saudi_I.png" /></p>
+		
+		<strong>Deaths: 21,529</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.5%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.5%</td>
+			</tr>
+		</table>
+		<p><img src="images/Saudi_DC.png" /></p>
+		
+		<strong>Fatality Rate: 1.62%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>1.63%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>1.61%</td>
+			</tr>
+		</table>
+		<p><img src="images/Saudi_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.84 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-8" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Diarrhea</li>
+				<li>Fever</li>
+				<li>Leg Pain</li>
+				<li>Back Pain</li>
+				<li>Nose bleeds</li>
+				<li>Cough</li>
+				<li>Visual Difficulty</li>
+				<li>Hand Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 88,457</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.3%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>49.7%</td>
+			</tr>
+		</table>
+		<p><img src="images/Thailand_I.png" /></p>
+		
+		<strong>Deaths: 86</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>41.9%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>58.1%</td>
+			</tr>
+		</table>
+		<p><img src="images/Thailand_DC.png" /></p>
+		
+		<strong>Fatality Rate: 0.10%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>0.11%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>0.08%</td>
+			</tr>
+		</table>
+		<p><img src="images/Thailand_DR.png" /></p>
+		
+		<strong>Average Death Onset: 4.92 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell2">5<p style="text-align: center">Died</p></td>
+				<td>6</td>
+				<td>7</td>
+			</tr>
+			<tr>
+				<td>8</td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-9" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Fever</li>
+				<li>Diarrhea</li>
+				<li>Back Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Nose bleeds</li>
+				<li>Cough</li>
+				<li>Hand Pain</li>
+				<li>Leg Pain</li>
+			</ol>
+		</div>
+		<strong>Infections: 303,987</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.0%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.0%</td>
+			</tr>
+		</table>
+		<p><img src="images/Turkey_I.png" /></p>
+		
+		<strong>Deaths: 280</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>54.3%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>45.7%</td>
+			</tr>
+		</table>
+		<p><img src="images/Turkey_DC.png" /></p>
+		
+		<strong>Fatality Rate: 0.09%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>0.10%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>0.08%</td>
+			</tr>
+		</table>
+		<p><img src="images/Turkey_DR.png" /></p>
+		
+		<strong>Average Death Onset: 4.96 days</strong><br />
+		<table class="calTab">
+			<tr>
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell2">5<p style="text-align: center">Died</p></td>
+				<td>6</td>
+				<td>7</td>
+			</tr>
+			<tr>
+				<td>8</td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-10" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Back Pain</li>
+				<li>Fever</li>
+				<li>Nose bleeds</li>
+				<li>Diarrhea</li>
+				<li>Leg Pain</li>
+				<li>Hand Pain</li>
+				<li>Visual Difficulty</li>
+				<li>Cough</li>
+			</ol>
+		</div>
+		<strong>Infections: 143,806</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.9%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.1%</td>
+			</tr>
+		</table>
+		<p><img src="images/Venezuela_I.png" /></p>
+		
+		<strong>Deaths: 3,717</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.1%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>49.9%</td>
+			</tr>
+		</table>
+		<p><img src="images/Venezuela_DC.png" /></p>
+		
+		<strong>Fatality Rate: 2.58%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>2.57%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>2.60%</td>
+			</tr>
+		</table>
+		<p><img src="images/Venezuela_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.91 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+	<div id="tabs-11" style="text-align: left">
+		<div style="float: right; width: 300px">
+			<strong>Most Common Symptoms</strong><br />
+			<ol>
+				<li>Abdominal Pain</li>
+				<li>Vomiting</li>
+				<li>Back Pain</li>
+				<li>Fever</li>
+				<li>Visual Difficulty</li>
+				<li>Nose bleeds</li>
+				<li>Diarrhea</li>
+				<li>Leg Pain</li>
+				<li>Hand Pain</li>
+				<li>Difficulty Breathing</li>
+			</ol>
+		</div>
+		<strong>Infections: 301,787</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>49.8%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.2%</td>
+			</tr>
+		</table>
+		<p><img src="images/Yemen_I.png" /></p>
+		
+		<strong>Deaths: 7,711</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>50.0%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>50.0%</td>
+			</tr>
+		</table>
+		<p><img src="images/Yemen_DC.png" /></p>
+		
+		<strong>Fatality Rate: 2.56%</strong><br />
+		<table>
+			<tr>
+				<td style="width: 80px; text-align: right; color: blue;">&#9792 Male: </td>
+				<td>2.54%</td>
+			</tr>
+			<tr>
+				<td style="width: 80px; text-align: right; color: #FF1493;">&#9794 Female: </td>
+				<td>2.57%</td>
+			</tr>
+		</table>
+		<p><img src="images/Yemen_DR.png" /></p>
+		
+		<strong>Average Death Onset: 7.91 days</strong><br />
+		<table class="calTab">
+			<tr>
+				<td class="cCell">1<p style="text-align: center">Entered<br />Hospital</p></td>
+				<td class="cCell">2</td>
+				<td class="cCell">3</td>
+				<td class="cCell">4</td>
+				<td class="cCell">5</td>
+				<td class="cCell">6</td>
+				<td class="cCell">7</td>
+			</tr>
+			<tr>
+				<td class="cCell2">8<p style="text-align: center">Died</p></td>
+				<td>9</td>
+				<td>10</td>
+				<td>11</td>
+				<td>12</td>
+				<td>13</td>
+				<td>14</td>
+			</tr>
+			<tr>
+				<td>15</td>
+				<td>16</td>
+				<td>17</td>
+				<td>18</td>
+				<td>19</td>
+				<td>20</td>
+				<td>21</td>
+			</tr>
+			<tr>
+				<td>22</td>
+				<td>23</td>
+				<td>24</td>
+				<td>25</td>
+				<td>26</td>
+				<td>27</td>
+				<td>28</td>
+			</tr>
+			<tr>
+				<td>29</td>
+				<td>30</td>
+				<td>31</td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+		</table>
+	</div>
+</div>
+
+</body>
+</html>
